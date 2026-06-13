@@ -70,7 +70,7 @@ export async function runLoop(opts: LoopOptions): Promise<LoopResult> {
       throw new Error("Token budget exceeded");
     }
 
-    messages.push({ role: "assistant", content: reply.text ?? "" });
+    messages.push({ role: "assistant", content: reply.text ?? "", toolCalls: reply.toolCalls });
 
     // No tool calls — final answer
     if (!reply.toolCalls || reply.toolCalls.length === 0) {

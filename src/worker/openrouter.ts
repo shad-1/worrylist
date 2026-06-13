@@ -25,6 +25,19 @@ export class OpenRouterWorker implements Worker {
       if (m.role === "tool") {
         return { role: "tool", content: m.content, tool_call_id: m.toolCallId! };
       }
+      if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+        // Carry the tool calls so the model sees its own prior invocations and
+        // the following tool results are valid OpenAI message history.
+        return {
+          role: "assistant",
+          content: m.content || null,
+          tool_calls: m.toolCalls.map(tc => ({
+            id: tc.id,
+            type: "function" as const,
+            function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+          })),
+        };
+      }
       return { role: m.role as "user" | "assistant", content: m.content };
     });
 

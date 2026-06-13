@@ -3,6 +3,9 @@ export interface Message {
   content: string;
   toolCallId?: string;
   toolName?: string;
+  // For assistant turns that call tools: the tool calls must be carried back in
+  // history so the model can see what it already invoked (otherwise it loops).
+  toolCalls?: ToolCall[];
 }
 
 export interface ToolCall {
