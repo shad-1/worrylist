@@ -5,8 +5,7 @@ import { initTracing } from "./observability/index";
 const sdk = initTracing(); // Must be first — before any openai imports
 
 import express from "express";
-import { handlePageCreated } from "./triggers/webhook-page-created";
-import { handlePageUpdated } from "./triggers/webhook-page-updated";
+import { handleNotionWebhook } from "./triggers/webhook";
 import { handleClassify } from "./triggers/classify";
 import { handleDigest } from "./triggers/digest";
 import { handleRecovery } from "./triggers/recovery";
@@ -21,9 +20,9 @@ app.use(express.json({
 // Health check
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// Notion webhooks — signature-verified
-app.post("/webhook/notion/page-created", verifyNotionSignature, handlePageCreated);
-app.post("/webhook/notion/page-updated", verifyNotionSignature, handlePageUpdated);
+// Notion webhook — single subscription URL (one per integration), signature-verified.
+// Routes page.created (Thoughts) and page.properties_updated (Alerts) internally.
+app.post("/webhook/notion", verifyNotionSignature, handleNotionWebhook);
 
 // Run handlers (also cron targets)
 app.post("/classify", async (req, res) => {
