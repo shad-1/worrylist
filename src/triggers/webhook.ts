@@ -17,36 +17,33 @@ function normalizeId(id: string | undefined | null): string {
   return (id ?? "").replace(/-/g, "").toLowerCase();
 }
 
-// Read a Notion rich_text or title property to a plain string.
-function readText(prop: AnyObj | undefined): string {
-  if (!prop) return "";
-  const arr = prop.rich_text ?? prop.title;
-  if (!Array.isArray(arr)) return "";
-  return arr.map((r: AnyObj) => r.plain_text ?? "").join("");
-}
-
-function findTitleProp(props: AnyObj): AnyObj | undefined {
-  for (const key of Object.keys(props ?? {})) {
-    if (props[key]?.type === "title") return props[key];
-  }
-  return undefined;
-}
-
 // A page's parent database id (classic API) or data-source id (newer API).
 function parentId(page: AnyObj): string {
   const p = page?.parent ?? {};
   return p.database_id ?? p.data_source_id ?? "";
 }
 
+// Concatenate the page's body text. Thoughts are typed into the page body, so
+// the text lives in child blocks — pages.retrieve returns properties only.
+async function readPageText(pageId: string): Promise<string> {
+  const res = (await getNotion().blocks.children.list({ block_id: pageId, page_size: 100 })) as AnyObj;
+  const parts: string[] = [];
+  for (const block of res.results ?? []) {
+    const b = block as AnyObj;
+    const rich = b[b.type]?.rich_text;
+    if (Array.isArray(rich)) parts.push(rich.map((r: AnyObj) => r.plain_text ?? "").join(""));
+  }
+  return parts.join("\n");
+}
+
 /**
  * Single Notion webhook endpoint.
  *
- * Notion only allows one subscription URL per integration, delivers thin
- * payloads (ids only, no page content), and runs a one-time verification
- * handshake. This handler covers all three: it logs the full body (so the
- * verification_token can be retrieved from the logs), answers the handshake,
- * and routes real events by type + parent, fetching the page from the API to
- * get its content.
+ * Notion allows one subscription URL per integration, delivers thin payloads
+ * (ids only, no page content), and runs a one-time verification handshake.
+ * This handler logs the full body (so the verification_token is retrievable
+ * from the logs), answers the handshake, and routes real events by parent,
+ * fetching the page/blocks from the API to get content.
  */
 export async function handleNotionWebhook(req: Request, res: Response): Promise<void> {
   const body = (req.body ?? {}) as AnyObj;
@@ -84,13 +81,16 @@ async function processEvent(eventType: string, pageId: string): Promise<void> {
   const thoughtsDb = process.env.NOTION_THOUGHTS_DB_ID;
   const isThoughts = !!thoughtsDb && normalizeId(parent) === normalizeId(thoughtsDb);
 
-  if (eventType.startsWith("page.created") && isThoughts) {
+  // Thoughts: the user types into the page body, and the text usually lands a
+  // moment AFTER page.created (arriving as page.content_updated). Route every
+  // thought-page event to the idempotent ingest path.
+  if (isThoughts) {
     await ingestThought(pageId, page);
     return;
   }
 
+  // Otherwise it may be an alert page whose status the user just changed.
   if (eventType === "page.properties_updated" || eventType === "page.content_updated") {
-    // Alert apply is self-validating: it no-ops if the page isn't a known alert.
     await applyAlert(pageId, page);
     return;
   }
@@ -99,22 +99,23 @@ async function processEvent(eventType: string, pageId: string): Promise<void> {
 }
 
 async function ingestThought(pageId: string, page: AnyObj): Promise<void> {
+  // Idempotent: a thought page emits several events (created + content updates);
+  // only the first that finds non-empty body text ingests + classifies.
   const existing = await getThoughtByNotionId(pageId);
   if (existing) {
     console.log(`[webhook] thought already ingested: ${pageId}`);
     return;
   }
 
-  const props = page.properties ?? {};
-  const content = (readText(props.content) || readText(findTitleProp(props))).trim();
+  const content = (await readPageText(pageId)).trim();
   if (!content) {
-    console.log(`[webhook] thought ${pageId} has empty content, skipping`);
+    console.log(`[webhook] thought ${pageId} body empty, will ingest on next update`);
     return;
   }
 
-  const model = props.model?.select?.name ?? DEFAULT_MODEL;
+  const model = page.properties?.model?.select?.name ?? DEFAULT_MODEL;
   const thought = await insertThought({ notion_page_id: pageId, content, model });
-
+  console.log(`[webhook] ingested thought ${thought.id}, classifying...`);
   await handleClassify({ thought_id: thought.id, notion_page_id: pageId, content, model });
 }
 
