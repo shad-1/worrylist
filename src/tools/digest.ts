@@ -1,3 +1,6 @@
+import { getNotion, richText } from "../notion/client";
+import { markdownToBlocks } from "../notion/markdown";
+
 export async function write_digest_page(args: Record<string, unknown>) {
   const { date, content, covered_task_ids } = args as {
     date: string;
@@ -5,10 +8,16 @@ export async function write_digest_page(args: Record<string, unknown>) {
     covered_task_ids: string[];
   };
 
-  console.log("[notion] create_page digest for:", date);
-  // TODO(Railway): replace with actual Notion MCP call
-  // mcp__notion__create_page({ parent: { page_id: NOTION_DIGESTS_PAGE_ID }, title: date, content })
-  const notion_page_id = "notion-digest-placeholder-id";
+  const parentPageId = process.env.NOTION_DIGESTS_PAGE_ID;
+  if (!parentPageId) throw new Error("NOTION_DIGESTS_PAGE_ID must be set");
 
-  return { date, notion_page_id, covered_task_ids };
+  const page = await getNotion().pages.create({
+    parent: { page_id: parentPageId },
+    properties: {
+      title: { title: richText(date) },
+    } as never,
+    children: markdownToBlocks(content) as never,
+  });
+
+  return { date, notion_page_id: page.id, covered_task_ids };
 }

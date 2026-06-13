@@ -1,19 +1,38 @@
 import { insertTask, updateTask, insertThoughtTask, type TaskRecord } from "../db/tasks";
+import { getNotion, richText } from "../notion/client";
 
-// Notion MCP call helper — wraps MCP tool calls
-// In Claude Code, MCP tools are available globally. In production Railway,
-// the Notion MCP runs as a sidecar and is called via HTTP or stdio.
-// For now, stub with console.log — replace with actual MCP invocation.
+// Map a (partial) task record to Notion Tasks-DB property values. Only fields
+// that are present are emitted, so this works for both create and update.
+function taskProperties(fields: Partial<TaskRecord>): Record<string, unknown> {
+  const props: Record<string, unknown> = {};
+  if (fields.title !== undefined) props.title = { title: richText(fields.title) };
+  if (fields.description !== undefined && fields.description !== null) {
+    props.description = { rich_text: richText(fields.description) };
+  }
+  if (fields.type !== undefined && fields.type !== null) props.type = { select: { name: fields.type } };
+  if (fields.urgency !== undefined && fields.urgency !== null) props.urgency = { number: fields.urgency };
+  if (fields.importance !== undefined && fields.importance !== null) props.importance = { number: fields.importance };
+  if (fields.want_done_at) props.want_done_at = { date: { start: fields.want_done_at } };
+  if (fields.need_done_at) props.need_done_at = { date: { start: fields.need_done_at } };
+  if (fields.status !== undefined) props.status = { select: { name: fields.status } };
+  return props;
+}
+
 async function notionCreateTaskPage(task: Partial<TaskRecord>): Promise<string> {
-  console.log("[notion] create_page task:", task.title);
-  // TODO(Railway): replace with actual Notion MCP call
-  // mcp__notion__create_page({ parent: { database_id: NOTION_TASKS_DB_ID }, properties: {...} })
-  return "notion-placeholder-id";
+  const database_id = process.env.NOTION_TASKS_DB_ID;
+  if (!database_id) throw new Error("NOTION_TASKS_DB_ID must be set");
+  const page = await getNotion().pages.create({
+    parent: { database_id },
+    properties: taskProperties(task) as never,
+  });
+  return page.id;
 }
 
 async function notionUpdateTaskPage(notion_page_id: string, fields: Partial<TaskRecord>): Promise<void> {
-  console.log("[notion] update_page task:", notion_page_id, fields);
-  // TODO(Railway): replace with actual Notion MCP call
+  await getNotion().pages.update({
+    page_id: notion_page_id,
+    properties: taskProperties(fields) as never,
+  });
 }
 
 export async function write_task(args: Record<string, unknown>) {
