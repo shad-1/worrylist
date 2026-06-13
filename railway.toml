@@ -1,0 +1,15 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm run start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[[services.cron]]
+schedule = "0 2 * * *"
+command = "curl -X POST $RAILWAY_STATIC_URL/digest"
+
+[[services.cron]]
+schedule = "*/10 * * * *"
+command = "curl -X POST $RAILWAY_STATIC_URL/recover"
