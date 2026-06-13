@@ -25,6 +25,11 @@ export function computeNotionSignature(secret: string, rawBody: Buffer): string 
  * - Secret set: rejects any request missing or failing the signature check.
  */
 export function verifyNotionSignature(req: RawBodyRequest, res: Response, next: NextFunction): void {
+  // Log every arrival up front so a request that fails verification is still
+  // visible in the logs (the rejection branches below return before the
+  // handler's own logging would run).
+  console.log(`[webhook] ${req.method} hit, signature header ${req.header("X-Notion-Signature") ? "present" : "absent"}`);
+
   const secret = process.env.NOTION_WEBHOOK_SECRET;
 
   if (!secret) {
@@ -35,6 +40,7 @@ export function verifyNotionSignature(req: RawBodyRequest, res: Response, next: 
 
   const provided = req.header("X-Notion-Signature");
   if (!provided || !req.rawBody) {
+    console.warn("[webhook] REJECTED 401 — missing X-Notion-Signature header or raw body");
     res.status(401).json({ error: "missing signature" });
     return;
   }
@@ -44,6 +50,7 @@ export function verifyNotionSignature(req: RawBodyRequest, res: Response, next: 
   const b = Buffer.from(expected);
 
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    console.warn("[webhook] REJECTED 401 — signature mismatch (check NOTION_WEBHOOK_SECRET matches the verification token)");
     res.status(401).json({ error: "invalid signature" });
     return;
   }
