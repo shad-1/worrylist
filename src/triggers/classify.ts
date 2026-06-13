@@ -12,7 +12,6 @@ import { withStageSpan } from "../observability/index";
 import { TOOL_SCHEMAS } from "../config/tools";
 import { search_thoughts, search_tasks } from "../tools/search";
 import { write_task, update_task } from "../tools/tasks";
-import { update_thought_status } from "../tools/thoughts";
 import { write_alert } from "../tools/alerts";
 import { delete_thought, delete_task, delete_alert } from "../tools/blocked";
 import type { LoopResult } from "../loop/index";
@@ -88,7 +87,6 @@ export async function handleClassify(params: {
       search_tasks,
       write_task: (a) => write_task({ ...a, thought_id }),
       update_task,
-      update_thought_status,
       write_alert: (a) => write_alert(a, runId),
       delete_thought,
       delete_task,
@@ -99,8 +97,11 @@ export async function handleClassify(params: {
     return fn(args);
   };
 
+  // The handler manages thought status itself (processing/completed/failed), so
+  // update_thought_status is NOT exposed to the agent — it has no real thought_id
+  // and would hallucinate one (crashing the run on an invalid uuid).
   const classifyTools = Object.values(TOOL_SCHEMAS).filter(t =>
-    !["write_digest_page", "read_calendar"].includes(t.name)
+    !["write_digest_page", "read_calendar", "update_thought_status"].includes(t.name)
   );
 
   try {
