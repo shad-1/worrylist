@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 *.js.map
+
+# Stray secret files — keys belong in .env / deploy env vars
+*_key.txt
+openrouter_key.txt
