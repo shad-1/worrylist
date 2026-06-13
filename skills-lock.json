@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "skills": {
+    "langfuse": {
+      "source": "langfuse/skills",
+      "sourceType": "github",
+      "skillPath": "skills/langfuse/SKILL.md",
+      "computedHash": "4c5fd7416a341ca8b56b2efcd96f68f867205f0b774ecb12f3078db490c0d5f3"
+    },
+    "render-cli": {
+      "source": "render-oss/skills",
+      "sourceType": "github",
+      "skillPath": "skills/render-cli/SKILL.md",
+      "computedHash": "f4c8fe13f48ddc919a7ae6aafca9ccad6f16e4aa886e4455db9ce58692604acd"
+    },
+    "render-cron-jobs": {
+      "source": "render-oss/skills",
+      "sourceType": "github",
+      "skillPath": "skills/render-cron-jobs/SKILL.md",
+      "computedHash": "2164b648e09566a29cdb4c8bab1c7defb16d02154d2c75e266c38d955f00707a"
+    },
+    "render-deploy": {
+      "source": "render-oss/skills",
+      "sourceType": "github",
+      "skillPath": "skills/render-deploy/SKILL.md",
+      "computedHash": "746656aaafd8953098bf43d4bc3ca3fddcec64d2f60850aa480bbca4cb515763"
+    },
+    "render-docker": {
+      "source": "render-oss/skills",
+      "sourceType": "github",
+      "skillPath": "skills/render-docker/SKILL.md",
+      "computedHash": "6abf8ea443dec8b3b01c3d5a99ff445bd42cd81a0fe5e98ba2e5e1f88b9285f8"
+    },
+    "render-postgres": {
+      "source": "render-oss/skills",
+      "sourceType": "github",
+      "skillPath": "skills/render-postgres/SKILL.md",
+      "computedHash": "033eb9b918801287a899357ddb6398c36d4d9ec19b2631107049c94fe8f40fd9"
+    },
+    "render-static-sites": {
+      "source": "render-oss/skills",
+      "sourceType": "github",
+      "skillPath": "skills/render-static-sites/SKILL.md",
+      "computedHash": "1ea39d11151fc0ba2129bc7f5bb7302f3ad45a821a55950a04e70b9456c1983c"
+    },
+    "render-web-services": {
+      "source": "render-oss/skills",
+      "sourceType": "github",
+      "skillPath": "skills/render-web-services/SKILL.md",
+      "computedHash": "56a3f63c7a9fb8848316da647f2ddcf80380ea3823ad53cfb52716ff293fcd1a"
+    },
+    "render-workflows": {
+      "source": "render-oss/skills",
+      "sourceType": "github",
+      "skillPath": "skills/render-workflows/SKILL.md",
+      "computedHash": "a022162ff43b56f7c3a8579476b02287fc3b66d79371e7f4a69bb0da6c5923b5"
+    }
+  }
+}
