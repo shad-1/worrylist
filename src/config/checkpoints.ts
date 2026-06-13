@@ -37,7 +37,7 @@ export const CHECKPOINTS = {
     return {
       passed,
       detail: `type=${data.type} confidence=${data.confidence}`,
-      data: data as Record<string, unknown>,
+      data: data as unknown as Record<string, unknown>,
     };
   },
 
@@ -47,7 +47,7 @@ export const CHECKPOINTS = {
     return {
       passed,
       detail: `urgency=${data.urgency} importance=${data.importance}`,
-      data: data as Record<string, unknown>,
+      data: data as unknown as Record<string, unknown>,
     };
   },
 
@@ -56,7 +56,7 @@ export const CHECKPOINTS = {
     return {
       passed,
       detail: `expected=${data.expected_approval_count} actual=${data.actual_approval_count}`,
-      data: data as Record<string, unknown>,
+      data: data as unknown as Record<string, unknown>,
     };
   },
 

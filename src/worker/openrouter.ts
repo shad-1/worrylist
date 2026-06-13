@@ -46,11 +46,13 @@ export class OpenRouterWorker implements Worker {
     const msg = response.choices[0].message;
     return {
       text: msg.content ?? undefined,
-      toolCalls: msg.tool_calls?.map(tc => ({
-        id: tc.id,
-        name: tc.function.name,
-        args: JSON.parse(tc.function.arguments) as Record<string, unknown>,
-      })),
+      toolCalls: msg.tool_calls
+        ?.filter((tc): tc is OpenAI.ChatCompletionMessageFunctionToolCall => tc.type === "function")
+        .map(tc => ({
+          id: tc.id,
+          name: tc.function.name,
+          args: JSON.parse(tc.function.arguments) as Record<string, unknown>,
+        })),
       usage: {
         inputTokens: response.usage?.prompt_tokens ?? 0,
         outputTokens: response.usage?.completion_tokens ?? 0,
