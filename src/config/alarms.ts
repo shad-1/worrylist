@@ -15,7 +15,7 @@ export interface Alarm {
   severity: AlarmSeverity;
   context: Record<string, unknown>;
   recommended_action: string;
-  run_id: string;
+  run_id: string | null;
 }
 
 export const ALARM_CATALOG: Record<AlarmType, { severity: AlarmSeverity; recommended_action: string }> = {

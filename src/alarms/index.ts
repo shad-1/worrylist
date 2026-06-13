@@ -3,7 +3,7 @@ import { ALARM_CATALOG, type Alarm, type AlarmType } from "../config/alarms";
 
 export async function fireAlarm(
   type: AlarmType,
-  run_id: string,
+  run_id: string | null,
   context: Record<string, unknown>
 ): Promise<void> {
   const catalog = ALARM_CATALOG[type];

@@ -58,7 +58,7 @@ export async function handleClassify(params: {
 
   const attemptCount = await countAttempts(thought_id);
   if (attemptCount >= MAX_ATTEMPTS) {
-    await fireAlarm("MAX_ATTEMPTS_EXCEEDED", "none", { thought_id, attempts: attemptCount });
+    await fireAlarm("MAX_ATTEMPTS_EXCEEDED", null, { thought_id, attempts: attemptCount });
     return;
   }
 
