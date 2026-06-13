@@ -10,16 +10,20 @@ import { handlePageUpdated } from "./triggers/webhook-page-updated";
 import { handleClassify } from "./triggers/classify";
 import { handleDigest } from "./triggers/digest";
 import { handleRecovery } from "./triggers/recovery";
+import { verifyNotionSignature, type RawBodyRequest } from "./triggers/verify-signature";
 
 const app = express();
-app.use(express.json());
+// Capture the raw body so webhook signatures can be verified over exact bytes.
+app.use(express.json({
+  verify: (req, _res, buf) => { (req as RawBodyRequest).rawBody = buf; },
+}));
 
 // Health check
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// Notion webhooks
-app.post("/webhook/notion/page-created", handlePageCreated);
-app.post("/webhook/notion/page-updated", handlePageUpdated);
+// Notion webhooks — signature-verified
+app.post("/webhook/notion/page-created", verifyNotionSignature, handlePageCreated);
+app.post("/webhook/notion/page-updated", verifyNotionSignature, handlePageUpdated);
 
 // Run handlers (also cron targets)
 app.post("/classify", async (req, res) => {
