@@ -12,15 +12,25 @@ import { handleClassify } from "./classify";
 
 const DEFAULT_MODEL = process.env.DEFAULT_WORKER_MODEL ?? "google/gemini-2.0-flash-lite";
 
+// A thought page emits a burst of events as the user types the body and picks a
+// model. Debounce per page so we ingest once the user has stopped editing —
+// capturing the FINAL content and model together (not a half-typed snapshot).
+const INGEST_DEBOUNCE_MS = Number(process.env.THOUGHT_INGEST_DEBOUNCE_MS ?? 10000);
+const pendingIngests = new Map<string, NodeJS.Timeout>();
+
 // Notion ids arrive dashed in the API but are often stored undashed in env.
 function normalizeId(id: string | undefined | null): string {
   return (id ?? "").replace(/-/g, "").toLowerCase();
 }
 
-// A page's parent database id (classic API) or data-source id (newer API).
-function parentId(page: AnyObj): string {
-  const p = page?.parent ?? {};
-  return p.database_id ?? p.data_source_id ?? "";
+// Read a select property by name, case-insensitively (Notion keys are
+// case-sensitive, but users name columns "Model" / "Status" however they like).
+function selectProp(page: AnyObj, name: string): string | undefined {
+  const props = page.properties ?? {};
+  for (const key of Object.keys(props)) {
+    if (key.toLowerCase() === name.toLowerCase()) return props[key]?.select?.name ?? undefined;
+  }
+  return undefined;
 }
 
 // Concatenate the page's body text. Thoughts are typed into the page body, so
@@ -43,7 +53,7 @@ async function readPageText(pageId: string): Promise<string> {
  * (ids only, no page content), and runs a one-time verification handshake.
  * This handler logs the full body (so the verification_token is retrievable
  * from the logs), answers the handshake, and routes real events by parent,
- * fetching the page/blocks from the API to get content.
+ * debouncing thought ingestion so the final content + model are captured.
  */
 export async function handleNotionWebhook(req: Request, res: Response): Promise<void> {
   const body = (req.body ?? {}) as AnyObj;
@@ -61,6 +71,8 @@ export async function handleNotionWebhook(req: Request, res: Response): Promise<
 
   const eventType: string = body.type ?? "";
   const pageId: string | undefined = body.entity?.id;
+  const parent = body.data?.parent ?? {};
+  const parentId: string = parent.id ?? parent.data_source_id ?? "";
 
   if (!pageId) {
     res.status(200).json({ skipped: "no entity id" });
@@ -70,60 +82,69 @@ export async function handleNotionWebhook(req: Request, res: Response): Promise<
   // Ack fast (Notion expects a prompt 2xx); process out of band.
   res.status(202).json({ received: true });
 
-  processEvent(eventType, pageId).catch((err) =>
+  processEvent(eventType, pageId, parentId).catch((err) =>
     console.error(`[webhook] processing failed for ${eventType} ${pageId}:`, err)
   );
 }
 
-async function processEvent(eventType: string, pageId: string): Promise<void> {
-  const page = (await getNotion().pages.retrieve({ page_id: pageId })) as AnyObj;
-  const parent = parentId(page);
+async function processEvent(eventType: string, pageId: string, parentId: string): Promise<void> {
   const thoughtsDb = process.env.NOTION_THOUGHTS_DB_ID;
-  const isThoughts = !!thoughtsDb && normalizeId(parent) === normalizeId(thoughtsDb);
+  const isThoughts = !!thoughtsDb && normalizeId(parentId) === normalizeId(thoughtsDb);
 
-  // Thoughts: the user types into the page body, and the text usually lands a
-  // moment AFTER page.created (arriving as page.content_updated). Route every
-  // thought-page event to the idempotent ingest path.
+  // Thoughts: debounce — the user is still typing the body and picking a model.
   if (isThoughts) {
-    await ingestThought(pageId, page);
+    scheduleIngest(pageId);
     return;
   }
 
   // Otherwise it may be an alert page whose status the user just changed.
   if (eventType === "page.properties_updated" || eventType === "page.content_updated") {
-    await applyAlert(pageId, page);
+    await applyAlert(pageId);
     return;
   }
 
-  console.log(`[webhook] no route for type=${eventType} parent=${parent}`);
+  console.log(`[webhook] no route for type=${eventType} parent=${parentId}`);
 }
 
-async function ingestThought(pageId: string, page: AnyObj): Promise<void> {
-  // Idempotent: a thought page emits several events (created + content updates);
-  // only the first that finds non-empty body text ingests + classifies.
+// Reset a per-page timer on every edit; ingest only after the user goes quiet.
+function scheduleIngest(pageId: string): void {
+  const existing = pendingIngests.get(pageId);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    pendingIngests.delete(pageId);
+    ingestThought(pageId).catch((err) => console.error(`[webhook] ingest failed ${pageId}:`, err));
+  }, INGEST_DEBOUNCE_MS);
+  pendingIngests.set(pageId, timer);
+  console.log(`[webhook] thought ${pageId} edit; ingest debounced ${INGEST_DEBOUNCE_MS}ms`);
+}
+
+async function ingestThought(pageId: string): Promise<void> {
+  // Idempotent: only ingest a given thought page once.
   const existing = await getThoughtByNotionId(pageId);
   if (existing) {
     console.log(`[webhook] thought already ingested: ${pageId}`);
     return;
   }
 
+  const page = (await getNotion().pages.retrieve({ page_id: pageId })) as AnyObj;
   const content = (await readPageText(pageId)).trim();
   if (!content) {
-    console.log(`[webhook] thought ${pageId} body empty, will ingest on next update`);
+    console.log(`[webhook] thought ${pageId} body empty, skipping`);
     return;
   }
 
-  const model = page.properties?.model?.select?.name ?? DEFAULT_MODEL;
+  const model = selectProp(page, "model") ?? DEFAULT_MODEL;
   const thought = await insertThought({ notion_page_id: pageId, content, model });
-  console.log(`[webhook] ingested thought ${thought.id}, classifying...`);
+  console.log(`[webhook] ingested thought ${thought.id} (model=${model}), classifying...`);
   await handleClassify({ thought_id: thought.id, notion_page_id: pageId, content, model });
 }
 
-async function applyAlert(pageId: string, page: AnyObj): Promise<void> {
+async function applyAlert(pageId: string): Promise<void> {
   const alert = await getAlertByNotionPageId(pageId);
   if (!alert) return; // not an alert page — ignore
 
-  const status: string | undefined = page.properties?.status?.select?.name;
+  const page = (await getNotion().pages.retrieve({ page_id: pageId })) as AnyObj;
+  const status = selectProp(page, "status");
   if (!status || !["approved", "rejected", "acknowledged"].includes(status)) return;
 
   await updateAlertStatus(alert.id, status as "approved" | "rejected" | "acknowledged");
